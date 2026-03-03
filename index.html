@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 /**
- * Komponent ikon SVG - zabezpieczony React.Fragment dla stabilności.
+ * Komponent ikon SVG - rygorystycznie zabezpieczony React.Fragment dla stabilności JSX.
  */
 const Icon = ({ name, size = 20, className = "" }) => {
   const icons = {
@@ -117,14 +117,6 @@ const App = () => {
     setResult(null);
   };
 
-  const getLangAbbr = (l) => {
-    const low = (l || "").toLowerCase();
-    if (low.includes('pol') || low === 'pl') return 'POL';
-    if (low.includes('eng') || low === 'en') return 'ENG';
-    if (low.includes('spa') || low === 'es') return 'ESP';
-    return (l || "???").substring(0, 3).toUpperCase();
-  };
-
   const toggleAudio = (url) => {
     if (playingUrl === url) { 
       audioRef.current.pause(); 
@@ -137,19 +129,12 @@ const App = () => {
   };
 
   const callGemini = async (base64, mime, id, tgt, isUrl) => {
-    if (!apiKey) throw new Error("BŁĄD: Musisz najpierw wkleić klucz API w polu na górze strony.");
+    if (!apiKey) throw new Error("Wprowadź klucz API Gemini!");
     
-    let prompt = `Zadanie: Dokładna transkrypcja i tłumaczenie. 
-      RYGORYSTYCZNE ZASADY: 
-      1. W obu oknach używaj formatu: **[Rozmówca X]** w osobnej linii.
-      2. Pod nazwą rozmówcy tekst wypowiedzi od nowej linii.
-      3. Każde zdanie od nowej linii.
-      4. Pusta linia odstępu przy zmianie rozmówcy.
-      5. Wykryj język i przetłumacz na polski.`;
-    
+    let prompt = `Zadanie: Dokładna transkrypcja i tłumaczenie. RYGORY: [Rozmówca X] pogrubiony w osobnej linii. Zdanie od nowej linii. Pusta linia przy zmianie głosu. Wynik w JSON.`;
     const parts = [{ text: prompt }];
     if (base64) parts.push({ inlineData: { mimeType: mime, data: base64 } });
-    else if (isUrl) parts.push({ text: `Przeanalizuj link: ${id}` });
+    else if (isUrl) parts.push({ text: `Link: ${id}` });
 
     const payload = {
       contents: [{ parts }],
@@ -182,13 +167,13 @@ const App = () => {
 
   const startProcessing = async () => {
     if (!apiKey || apiKey.trim() === "") {
-      setErrorMessage("BŁĄD KRYTYCZNY: Nie wpisano klucza API. Transkrypcja nie może zostać uruchomiona bez klucza Gemini.");
+      setErrorMessage("BŁĄD KRYTYCZNY: Nie wpisano klucza API. Transkrypcja nie może zostać uruchomiona bez klucza.");
       setStatus('error');
       return;
     }
 
     if (filesData.length === 0 && !inputUrl) {
-      setErrorMessage("BŁĄD: Najpierw dodaj pliki lub wklej link do transkrypcji.");
+      setErrorMessage("BŁĄD: Wybierz pliki lub wklej link przed rozpoczęciem.");
       setStatus('error');
       return;
     }
@@ -204,6 +189,7 @@ const App = () => {
           const r = new FileReader();
           const b64 = await new Promise((res) => { r.onload = () => res(r.result.split(',')[1]); r.readAsDataURL(fD.file); });
           const data = await callGemini(b64, fD.file.type || "audio/mpeg", fD.name, targetLanguage, false);
+          
           if (!combined.detectedLanguage) combined.detectedLanguage = data.detectedLanguage;
           const header = `FILE_TAG:${fD.name}|${fD.url}\n\n`;
           combined.originalTranscription += header + data.originalTranscription + "\n\n---\n\n";
@@ -221,7 +207,15 @@ const App = () => {
       }
       setResult(combined);
       setStatus('success');
-    } catch (err) { setErrorMessage(err.message || "Błąd połączenia z serwerem Gemini."); setStatus('error'); }
+    } catch (err) { setErrorMessage(err.message); setStatus('error'); }
+  };
+
+  const getLangAbbr = (l) => {
+    const low = (l || "").toLowerCase();
+    if (low.includes('pol') || low === 'pl') return 'POL';
+    if (low.includes('eng') || low === 'en') return 'ENG';
+    if (low.includes('spa') || low === 'es') return 'ESP';
+    return (l || "???").substring(0, 3).toUpperCase();
   };
 
   const renderText = (txt, isSource) => {
@@ -231,59 +225,45 @@ const App = () => {
       if (trimmed.startsWith('FILE_TAG:')) {
         const [tag, url] = trimmed.replace('FILE_TAG:', '').split('|');
         return (
-          <div key={i} className="mt-10 mb-5 first:mt-0 flex items-center justify-between border-b border-blue-500/20 pb-2">
-            <span className="text-[16px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-2"><Icon name="Files" size={18}/> {tag}</span>
+          <div key={i} className="mt-8 mb-4 border-b border-blue-500/20 pb-2 flex items-center justify-between">
+            <span className="text-[15px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-2"><Icon name="Files" size={18}/> {tag}</span>
             {isSource && url !== 'null' && (
-              <button 
-                onClick={() => toggleAudio(url)} 
-                className="px-4 py-2 bg-blue-500/10 text-blue-500 text-[11px] font-black uppercase rounded-lg border border-blue-500/20 active:scale-95 transition-all"
-              >
+              <button onClick={() => toggleAudio(url)} className="px-3 py-1.5 bg-blue-500/10 text-blue-500 text-[10px] font-black uppercase rounded-lg border border-blue-500/20 active:scale-95 transition-all">
                 {playingUrl === url ? "Stop" : "Play"}
               </button>
             )}
           </div>
         );
       }
-      if (trimmed.startsWith('**') && trimmed.endsWith('**')) return <div key={i} className="font-bold text-zinc-500 mt-6 mb-1 text-[14px] uppercase tracking-widest leading-none">{trimmed.replace(/\*\*/g, '')}</div>;
+      if (trimmed.startsWith('**') && trimmed.endsWith('**')) return <div key={i} className="font-bold text-zinc-500 mt-6 mb-1 text-[13px] uppercase tracking-widest leading-none">{trimmed.replace(/\*\*/g, '')}</div>;
       if (trimmed === '---') return <div key={i} className="my-10 h-px bg-zinc-800 opacity-20" />;
-      return <div key={i} className="min-h-[1.5em] text-zinc-300">{trimmed}</div>;
+      return <div key={i} className="min-h-[1.5em] text-zinc-200">{trimmed}</div>;
     });
   };
 
-  const isIdle = status === 'idle' && !result;
-
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 lg:p-8 font-sans selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 lg:p-10 font-sans selection:bg-indigo-500/30">
       <header className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center mb-10 gap-6">
-        <div className="flex items-center gap-4">
-          <div className="p-4 rounded-2xl bg-indigo-600 shadow-xl shadow-indigo-900/20">
-            <Icon name="Files" size={36} className="text-white" />
-          </div>
+        <div className="flex items-center gap-5">
+          <div className="p-4 rounded-[1.5rem] bg-indigo-600 shadow-2xl shadow-indigo-900/40"><Icon name="Files" size={40} className="text-white" /></div>
           <div>
             <h1 className="text-3xl font-black uppercase tracking-tighter text-white leading-none">MediaTranscribe Pro</h1>
-            <p className="text-[12px] uppercase tracking-widest opacity-40 italic text-white mt-1">v6.5 Multi-File • Szef Edition</p>
+            <p className="text-[11px] uppercase tracking-widest opacity-40 italic text-white mt-2">v6.6 Secure • Szef Edition</p>
           </div>
         </div>
-        <div className="flex gap-3">
-          <button 
-            onClick={resetForm} 
-            className="px-8 py-4 rounded-2xl font-black text-[12px] uppercase border border-zinc-800 hover:text-rose-400 transition-all text-zinc-400 flex items-center gap-2"
-          >
-            <Icon name="Trash2" size={16}/> Wyczyść sesję
-          </button>
-        </div>
+        <button onClick={resetForm} className="px-8 py-4 rounded-2xl font-black text-xs uppercase border border-zinc-800 hover:text-rose-400 transition-all text-zinc-400 flex items-center gap-3">
+          <Icon name="Trash2" size={16}/> Wyczyść sesję
+        </button>
       </header>
 
-      <div className="max-w-7xl mx-auto grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+      <div className="max-w-7xl mx-auto grid grid-cols-1 xl:grid-cols-12 gap-10 items-start">
         {/* Panel Konfiguracji */}
-        <div className={`xl:col-span-4 space-y-6 ${isIdle ? 'xl:col-start-5 xl:col-span-4' : ''} transition-all duration-700`}>
+        <div className={`xl:col-span-4 space-y-8 ${(status === 'idle' && !result) ? 'xl:col-start-5 xl:col-span-4' : ''} transition-all duration-700`}>
           <div className="p-10 rounded-[3rem] border border-zinc-800 bg-zinc-900 shadow-2xl">
-            <div className="space-y-10">
-              {/* Sekcja Klucza API */}
+            <div className="space-y-8">
+              {/* Klucz API */}
               <div className="space-y-3">
-                <label className="text-[12px] font-black uppercase opacity-60 ml-1 tracking-widest flex items-center gap-2">
-                  <Icon name="Settings" size={14}/> Klucz API Gemini
-                </label>
+                <label className="text-sm font-black uppercase opacity-60 ml-1 tracking-widest flex items-center gap-2"><Icon name="Settings" size={14}/> Klucz API Gemini</label>
                 <input 
                   type="password" 
                   placeholder="Wklej klucz API" 
@@ -293,51 +273,39 @@ const App = () => {
                 />
               </div>
 
-              {/* Sekcja Mediów z Drag & Drop */}
+              {/* Drag & Drop Area */}
               <div 
                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={(e) => { e.preventDefault(); setIsDragging(false); processFiles(e.dataTransfer.files); }}
                 onClick={() => fileInputRef.current.click()} 
-                className={`border-2 border-dashed rounded-[2.5rem] p-14 text-center cursor-pointer transition-all group ${isDragging ? 'border-indigo-500 bg-indigo-500/10' : 'border-zinc-800 hover:border-indigo-500'}`}
+                className={`border-2 border-dashed rounded-[2.5rem] p-12 text-center cursor-pointer transition-all group ${isDragging ? 'border-blue-500 bg-blue-500/5' : 'border-zinc-800 hover:border-indigo-500'}`}
               >
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  className="hidden" 
-                  multiple 
-                  onChange={(e) => processFiles(e.target.files)} 
-                  accept="audio/*,video/*" 
-                />
-                <Icon name="Upload" className={`mx-auto mb-5 transition-all ${isDragging ? 'scale-110 text-indigo-500' : 'opacity-20 group-hover:opacity-100'}`} size={56} />
-                <p className="text-[14px] font-black uppercase tracking-widest">
-                  {filesData.length ? `Dodano ${filesData.length} plików` : "Wgraj audio/video"}
-                </p>
-                <p className="text-[11px] uppercase opacity-40 mt-2 tracking-tighter italic text-zinc-400">Przeciągnij i upuść pliki tutaj</p>
+                <input type="file" ref={fileInputRef} className="hidden" multiple onChange={(e) => processFiles(e.target.files)} accept="audio/*,video/*" />
+                <Icon name="Upload" className={`mx-auto mb-6 transition-all ${isDragging ? 'text-blue-500 scale-110' : 'opacity-20 group-hover:opacity-100'}`} size={60} />
+                <p className="text-[15px] font-black uppercase tracking-widest">{filesData.length ? `Dodano ${filesData.length} plików` : "Wgraj lub przeciągnij media"}</p>
+                <p className="text-[10px] opacity-30 mt-3 uppercase tracking-tighter">Audio / Video • Max 25MB/plik</p>
               </div>
 
-              <div className="space-y-3">
-                <label className="text-[12px] font-black uppercase opacity-60 ml-1 tracking-widest">Link zewnętrzny</label>
-                <input 
-                  type="text" 
-                  placeholder="Lub wklej link YouTube..." 
-                  value={inputUrl} 
-                  onChange={(e) => setInputUrl(e.target.value)} 
-                  className="w-full p-5 rounded-2xl bg-transparent border border-zinc-800 outline-none focus:border-indigo-500 text-white font-bold text-base placeholder:opacity-30" 
-                />
-              </div>
+              <input 
+                type="text" 
+                placeholder="Lub wklej link YouTube..." 
+                value={inputUrl} 
+                onChange={(e) => setInputUrl(e.target.value)} 
+                className="w-full p-5 rounded-2xl bg-transparent border border-zinc-800 outline-none focus:border-indigo-500 text-white font-bold text-sm" 
+              />
               
-              {/* Sekcja Języków - PRZYWRÓCONA DO JEDNEJ LINII */}
+              {/* Sekcja Języków w jednej linii */}
               <div className="grid grid-cols-2 gap-5">
                 <div className="space-y-2">
-                  <label className="text-[12px] font-black uppercase text-blue-500 ml-1 tracking-widest block">Język źródła</label>
-                  <select className="w-full p-4 rounded-xl bg-zinc-800 border-none text-white text-[13px] font-black outline-none cursor-pointer">
+                  <label className="text-[12px] font-black uppercase text-blue-500 ml-1 tracking-widest">Język źródła</label>
+                  <select className="w-full p-4 rounded-xl bg-zinc-800 border-none text-white text-xs font-black outline-none cursor-pointer">
                     <option>Auto-wykrywanie</option>
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[12px] font-black uppercase text-blue-500 ml-1 tracking-widest block">Tłumaczenie</label>
-                  <select className="w-full p-4 rounded-xl bg-zinc-800 border-none text-white text-[13px] font-black outline-none cursor-pointer">
+                  <label className="text-[12px] font-black uppercase text-blue-500 ml-1 tracking-widest">Tłumaczenie</label>
+                  <select className="w-full p-4 rounded-xl bg-zinc-800 border-none text-white text-xs font-black outline-none cursor-pointer">
                     <option>Polski (POL)</option>
                   </select>
                 </div>
@@ -346,14 +314,14 @@ const App = () => {
               <button 
                 onClick={startProcessing} 
                 disabled={status === 'processing'}
-                className="w-full py-7 rounded-[2.5rem] bg-indigo-600 text-white font-black text-lg uppercase tracking-[0.4em] shadow-2xl active:scale-95 transition-all disabled:opacity-50"
+                className="w-full py-7 rounded-[2.5rem] bg-indigo-600 text-white font-black text-lg uppercase tracking-[0.5em] shadow-2xl shadow-indigo-900/40 active:scale-95 transition-all disabled:opacity-50"
               >
-                {status === 'processing' ? `Analizuję (${currentFileIndex}/${filesData.length || 1})...` : "ROZPOCZNIJ"}
+                {status === 'processing' ? `Analizuję...` : "ROZPOCZNIJ"}
               </button>
             </div>
           </div>
           {status === 'error' && (
-            <div className="p-6 bg-rose-500/10 border border-rose-500/20 rounded-[2.5rem] text-rose-500 text-[14px] font-black flex gap-3 items-start animate-in fade-in slide-in-from-top-2">
+            <div className="p-6 bg-rose-500/10 border border-rose-500/20 rounded-[2.5rem] text-rose-500 text-sm font-black flex gap-3 items-start animate-in fade-in slide-in-from-top-2">
               <Icon name="AlertCircle" size={24} className="mt-0.5 shrink-0" /> 
               <span>{errorMessage}</span>
             </div>
@@ -363,62 +331,38 @@ const App = () => {
         {/* Sekcja Wyników */}
         {(status === 'processing' || result) && (
           <div className="xl:col-span-8 grid grid-cols-1 lg:grid-cols-2 gap-10 animate-in fade-in duration-700">
+            {/* Źródło */}
             <div className="flex flex-col h-[45rem] rounded-[3rem] border border-zinc-800 bg-zinc-900 overflow-hidden shadow-2xl">
-              <div className="p-10 border-b border-zinc-800 flex items-center justify-between bg-zinc-900">
+              <div className="p-10 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50 backdrop-blur-xl">
                 <h3 className="text-base font-black uppercase text-blue-500 flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full bg-blue-500 shadow-lg shadow-blue-500/40"></div>
+                  <div className="w-3 h-3 rounded-full bg-blue-500 shadow-lg shadow-blue-500/50"></div>
                   Źródło ({getLangAbbr(result?.detectedLanguage)})
                 </h3>
-                <button 
-                  onClick={() => result && navigator.clipboard.writeText(result.originalTranscription)} 
-                  className="text-zinc-500 hover:text-blue-500 transition-colors"
-                >
-                  <Icon name="Copy" size={22}/>
-                </button>
+                <button onClick={() => result && navigator.clipboard.writeText(result.originalTranscription)} className="text-zinc-500 hover:text-blue-500 transition-all p-2"><Icon name="Copy" size={22}/></button>
               </div>
-              <div className="flex-1 overflow-y-auto p-10 bg-black/40 scrollbar-thin">
-                {renderText(result?.originalTranscription, true)}
-              </div>
+              <div className="flex-1 overflow-y-auto p-10 bg-black/40 scrollbar-thin">{renderText(result?.originalTranscription, true)}</div>
             </div>
 
+            {/* Tłumaczenie */}
             <div className="flex flex-col h-[45rem] rounded-[3rem] border border-zinc-800 bg-zinc-900 overflow-hidden shadow-2xl">
-              <div className="p-10 border-b border-zinc-800 flex flex-col justify-center bg-zinc-900">
+              <div className="p-10 border-b border-zinc-800 flex flex-col justify-center bg-zinc-900/50 backdrop-blur-xl">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-base font-black uppercase text-blue-500 flex items-center gap-3">
-                    <Icon name="Globe" size={22}/> Tłumaczenie (POL)
-                  </h3>
-                  <button 
-                    onClick={() => result && navigator.clipboard.writeText(translationMode === 'advanced' ? result.translationAdvanced : result.translationLiteral)} 
-                    className="text-zinc-500 hover:text-blue-500 transition-colors"
-                  >
-                    <Icon name="Copy" size={22}/>
-                  </button>
+                  <h3 className="text-base font-black uppercase text-blue-500 flex items-center gap-3"><Icon name="Globe" size={22}/>Tłumaczenie (POL)</h3>
+                  <button onClick={() => result && navigator.clipboard.writeText(translationMode === 'advanced' ? result.translationAdvanced : result.translationLiteral)} className="text-zinc-500 hover:text-blue-500 transition-all p-2"><Icon name="Copy" size={22}/></button>
                 </div>
                 <div className="flex gap-2 p-1.5 rounded-[1.25rem] bg-zinc-800/40 w-fit border border-white/5 shadow-inner">
-                  <button 
-                    onClick={() => setTranslationMode('literal')} 
-                    className={`px-4 py-1.5 text-[11px] font-black uppercase rounded-lg transition-all ${translationMode === 'literal' ? 'bg-indigo-600 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-                  >
-                    Dosłowne
-                  </button>
-                  <button 
-                    onClick={() => setTranslationMode('advanced')} 
-                    className={`px-4 py-1.5 text-[11px] font-black uppercase rounded-lg transition-all ${translationMode === 'advanced' ? 'bg-indigo-600 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-                  >
-                    Zaawansowane
-                  </button>
+                  <button onClick={() => setTranslationMode('literal')} className={`px-6 py-2.5 text-[10px] font-black uppercase rounded-xl transition-all ${translationMode === 'literal' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}>Dosłowne</button>
+                  <button onClick={() => setTranslationMode('advanced')} className={`px-6 py-2.5 text-[10px] font-black uppercase rounded-xl transition-all ${translationMode === 'advanced' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}>Zaawansowane</button>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-10 bg-black/40 scrollbar-thin">
-                {renderText(translationMode === 'advanced' ? result?.translationAdvanced : result?.translationLiteral, false)}
-              </div>
+              <div className="flex-1 overflow-y-auto p-10 bg-black/40 scrollbar-thin">{renderText(translationMode === 'advanced' ? result?.translationAdvanced : result?.translationLiteral, false)}</div>
             </div>
           </div>
         )}
       </div>
 
       <footer className="max-w-7xl mx-auto mt-24 pt-12 border-t border-zinc-900/50 opacity-30 text-center">
-        <p className="text-[12px] font-black uppercase tracking-[0.5em]">Aplikacja utworzona przez Szefa (nolores123@gmail.com)</p>
+        <p className="text-[12px] font-black uppercase tracking-[0.5em] text-white">Aplikacja utworzona przez Szefa (nolores123@gmail.com)</p>
       </footer>
     </div>
   );
